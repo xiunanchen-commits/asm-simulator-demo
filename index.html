@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1300">
+<title>ASM Layout Simulator - CBSNC001VN4110</title>
+<style>
+  :root {
+    --primary: #4472C4;
+    --primary-hover: #3661B0;
+    --text-primary: #222;
+    --text-muted: #999;
+    --border: #E8E8E8;
+    --bg-page: #F7F8FA;
+    --bg-white: #FFF;
+    --shadow-sm: 0 1px 4px rgba(0,0,0,0.08);
+    --radius: 6px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg-page);
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+  .page-header {
+    background: var(--bg-white);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+  }
+  .page-title { font-size: 18px; font-weight: 600; }
+  .page-sub { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+  .controls {
+    display: flex; align-items: center; gap: 14px;
+    padding: 20px 32px; flex-wrap: wrap;
+  }
+  .controls label { font-size: 14px; font-weight: 500; white-space: nowrap; }
+  .parcel-input {
+    width: 180px; height: 38px;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 0 14px; font-size: 14px; outline: none; font-family: inherit;
+  }
+  .parcel-input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(68,114,196,0.15); }
+  .btn {
+    height: 38px; padding: 0 20px; border-radius: var(--radius);
+    font-size: 14px; font-weight: 500; cursor: pointer;
+    transition: all 0.2s; font-family: inherit; border: 1px solid var(--border);
+    background: #FFF; color: var(--text-primary);
+  }
+  .btn:hover { border-color: var(--primary); color: var(--primary); }
+  .btn-primary { background: var(--primary); color: #FFF; border-color: var(--primary); }
+  .btn-primary:hover { background: var(--primary-hover); }
+
+  .stats-bar { display: flex; gap: 24px; padding: 0 32px 20px; flex-wrap: wrap; }
+  .stat-card {
+    background: var(--bg-white); border-radius: var(--radius);
+    box-shadow: var(--shadow-sm); padding: 14px 20px; min-width: 140px;
+  }
+  .stat-label { font-size: 12px; color: var(--text-muted); }
+  .stat-value { font-size: 22px; font-weight: 700; margin-top: 4px; }
+
+  .layout-wrapper {
+    background: var(--bg-white); margin: 0 32px 32px;
+    border-radius: var(--radius); box-shadow: var(--shadow-sm);
+    padding: 24px; overflow-x: auto;
+  }
+  .layout-title { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .layout-subtitle { font-size: 13px; color: var(--text-muted); margin-bottom: 14px; }
+  .layout-container { position: relative; display: inline-block; }
+  .layout-container svg { display: block; }
+
+  .legend {
+    display: flex; align-items: center; gap: 20px;
+    margin-top: 16px; flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #666; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 2px; border: 1px solid rgba(0,0,0,0.08); }
+
+  .layout-stats {
+    display: flex; gap: 24px; margin-top: 12px; flex-wrap: wrap;
+    font-size: 13px; color: #555;
+  }
+  .strategy-select {
+    padding: 8px 12px; border: 1px solid #ddd; border-radius: var(--radius);
+    font-size: 13px; color: var(--text-primary); background: var(--bg-white);
+    cursor: pointer; outline: none; min-width: 260px;
+  }
+  .strategy-select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(68,114,196,0.15); }
+  .layout-stats span { font-weight: 600; color: var(--text-primary); }
+  .layout-cell { transition: fill 0.4s ease; }
+  .parcel-dot { pointer-events: none; filter: drop-shadow(0 0 2px rgba(255,68,68,0.6)); }
+  .cell-tooltip {
+    position: fixed; background: rgba(0,0,0,0.82); color: #fff;
+    padding: 6px 12px; border-radius: 4px; font-size: 12px; line-height: 1.5;
+    pointer-events: none; z-index: 1000; display: none; white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="page-title">ASM Simulator Layout</div>
+  <div class="page-sub">CBSNC001VN4110 &middot; Total Positions: 320 &middot; Interval: 0.60m</div>
+</div>
+
+<div class="controls">
+  <label for="parcelCount">Add Parcels</label>
+  <input type="number" class="parcel-input" id="parcelCount" placeholder="Enter parcel count" min="1">
+  <label for="strategySelect" style="margin-left:12px">Strategy</label>
+  <select id="strategySelect" class="strategy-select">
+    <option value="unchanged" selected>number of chutes remaining unchanged</option>
+    <option value="reducing">reducing the number of chutes</option>
+    <option value="comprehensive">comprehensive mode</option>
+  </select>
+  <button class="btn btn-primary" id="confirmBtn" onclick="handleConfirm()">Confirm</button>
+  <button class="btn" id="pauseBtn" onclick="handlePause()">⏸ Pause</button>
+  <button class="btn" onclick="handleStop()">Stop</button>
+  <button class="btn" onclick="handleReset()">Reset</button>
+  <button class="btn" onclick="handleSkip()">Skip</button>
+</div>
+
+<div class="stats-bar">
+  <div class="stat-card"><div class="stat-label">Total Positions</div><div class="stat-value">320</div></div>
+  <div class="stat-card"><div class="stat-label">Chutes</div><div class="stat-value">240</div></div>
+  <div class="stat-card"><div class="stat-label">Inductions</div><div class="stat-value">14</div></div>
+  <div class="stat-card"><div class="stat-label">Parcels on Track</div><div class="stat-value" id="parcelStat">0</div></div>
+  <div class="stat-card"><div class="stat-label">Current Sorted</div><div class="stat-value" id="sortedCurrent">0</div></div>
+  <div class="stat-card"><div class="stat-label">Recommended Sorted</div><div class="stat-value" id="sortedRec">0</div></div>
+</div>
+
+<div class="layout-wrapper">
+  <div class="layout-title">Layout Map — Current Version</div>
+  <div class="layout-subtitle">Random distribution based on current chute mapping</div>
+  <div class="layout-container"><svg id="svgCurrent"></svg></div>
+  <div class="layout-stats" id="statsCurrent"></div>
+  <div class="legend" id="legendCurrent"></div>
+</div>
+
+<div class="layout-wrapper">
+  <div class="layout-title">Layout Map — Recommended Version</div>
+  <div class="layout-subtitle">Uniform distribution with optimized chute mapping</div>
+  <div class="layout-container"><svg id="svgRec"></svg></div>
+  <div class="layout-stats" id="statsRec"></div>
+  <div class="legend" id="legendRec"></div>
+</div>
+
+<div class="cell-tooltip" id="cellTooltip"></div>
+
+<script>
+const LAYOUT_DATA=[{"r":5,"c":33,"label":"L3-1","type":"induction"},{"r":5,"c":35,"label":"L3-2","type":"induction"},{"r":5,"c":37,"label":"L3-3","type":"induction"},{"r":5,"c":39,"label":"L3-4","type":"induction"},{"r":5,"c":41,"label":"L3-5","type":"induction"},{"r":5,"c":43,"label":"L3-6","type":"induction"},{"r":5,"c":45,"label":"L3-7","type":"induction"},{"r":6,"c":33,"label":"L2-1","type":"induction"},{"r":6,"c":35,"label":"L2-2","type":"induction"},{"r":6,"c":37,"label":"L2-3","type":"induction"},{"r":6,"c":39,"label":"L2-4","type":"induction"},{"r":6,"c":41,"label":"L2-5","type":"induction"},{"r":6,"c":43,"label":"L2-6","type":"induction"},{"r":6,"c":45,"label":"L2-7","type":"induction"},{"r":7,"c":33,"label":"L1-1","type":"induction"},{"r":7,"c":35,"label":"L1-2","type":"induction"},{"r":7,"c":37,"label":"L1-3","type":"induction"},{"r":7,"c":39,"label":"L1-4","type":"induction"},{"r":7,"c":41,"label":"L1-5","type":"induction"},{"r":7,"c":43,"label":"L1-6","type":"induction"},{"r":7,"c":45,"label":"L1-7","type":"induction"},{"r":7,"c":72,"label":"CH002","type":"non_lh"},{"r":7,"c":73,"label":"CH004","type":"non_lh"},{"r":7,"c":74,"label":"CH006","type":"lh"},{"r":7,"c":75,"label":"CH008","type":"lh"},{"r":7,"c":76,"label":"CH010","type":"lh"},{"r":7,"c":77,"label":"CH012","type":"changed"},{"r":7,"c":78,"label":"CH014","type":"lh"},{"r":7,"c":79,"label":"CH016","type":"changed"},{"r":7,"c":80,"label":"CH018","type":"lh"},{"r":7,"c":81,"label":"CH020","type":"changed"},{"r":7,"c":82,"label":"CH022","type":"lh"},{"r":7,"c":83,"label":"CH024","type":"lh"},{"r":7,"c":84,"label":"CH026","type":"changed"},{"r":7,"c":85,"label":"CH028","type":"changed"},{"r":7,"c":86,"label":"CH030","type":"lh"},{"r":7,"c":87,"label":"CH032","type":"lh"},{"r":7,"c":88,"label":"CH034","type":"changed"},{"r":7,"c":89,"label":"CH036","type":"lh"},{"r":7,"c":90,"label":"CH038","type":"lh"},{"r":7,"c":91,"label":"CH040","type":"lh"},{"r":7,"c":92,"label":"CH042","type":"changed"},{"r":7,"c":93,"label":"CH044","type":"lh"},{"r":7,"c":94,"label":"CH046","type":"lh"},{"r":7,"c":95,"label":"CH048","type":"lh"},{"r":7,"c":96,"label":"CH050","type":"lh"},{"r":7,"c":97,"label":"CH052","type":"lh"},{"r":7,"c":98,"label":"CH054","type":"lh"},{"r":7,"c":99,"label":"CH056","type":"lh"},{"r":7,"c":100,"label":"CH058","type":"lh"},{"r":7,"c":101,"label":"CH060","type":"lh"},{"r":7,"c":102,"label":"CH062","type":"lh"},{"r":7,"c":103,"label":"CH064","type":"lh"},{"r":7,"c":104,"label":"CH066","type":"lh"},{"r":7,"c":105,"label":"CH068","type":"lh"},{"r":7,"c":106,"label":"CH070","type":"lh"},{"r":7,"c":107,"label":"CH072","type":"lh"},{"r":7,"c":108,"label":"CH074","type":"lh"},{"r":7,"c":109,"label":"CH076","type":"lh"},{"r":7,"c":110,"label":"CH078","type":"lh"},{"r":7,"c":111,"label":"CH080","type":"lh"},{"r":7,"c":112,"label":"CH082","type":"lh"},{"r":7,"c":113,"label":"CH084","type":"lh"},{"r":7,"c":114,"label":"CH086","type":"lh"},{"r":7,"c":115,"label":"CH088","type":"lh"},{"r":7,"c":116,"label":"CH090","type":"lh"},{"r":7,"c":117,"label":"CH092","type":"lh"},{"r":7,"c":118,"label":"CH094","type":"lh"},{"r":7,"c":119,"label":"CH096","type":"lh"},{"r":7,"c":120,"label":"CH098","type":"lh"},{"r":7,"c":121,"label":"CH100","type":"lh"},{"r":7,"c":122,"label":"CH102","type":"lh"},{"r":7,"c":123,"label":"CH104","type":"lh"},{"r":7,"c":124,"label":"CH106","type":"lh"},{"r":7,"c":125,"label":"CH108","type":"changed"},{"r":7,"c":126,"label":"CH110","type":"lh"},{"r":7,"c":127,"label":"CH112","type":"lh"},{"r":7,"c":128,"label":"CH114","type":"changed"},{"r":7,"c":129,"label":"CH116","type":"lh"},{"r":7,"c":130,"label":"CH118","type":"lh"},{"r":7,"c":131,"label":"CH120","type":"non_lh"},{"r":8,"c":8,"label":"0","type":"track"},{"r":8,"c":9,"label":"1","type":"track"},{"r":8,"c":10,"label":"2","type":"track"},{"r":8,"c":11,"label":"3","type":"track"},{"r":8,"c":12,"label":"4","type":"track"},{"r":8,"c":13,"label":"5","type":"track"},{"r":8,"c":14,"label":"6","type":"track"},{"r":8,"c":15,"label":"7","type":"track"},{"r":8,"c":16,"label":"8","type":"track"},{"r":8,"c":17,"label":"9","type":"track"},{"r":8,"c":18,"label":"10","type":"track"},{"r":8,"c":19,"label":"11","type":"track"},{"r":8,"c":20,"label":"12","type":"track"},{"r":8,"c":21,"label":"13","type":"track"},{"r":8,"c":22,"label":"14","type":"track"},{"r":8,"c":23,"label":"15","type":"track"},{"r":8,"c":24,"label":"16","type":"track"},{"r":8,"c":25,"label":"17","type":"track"},{"r":8,"c":26,"label":"18","type":"track"},{"r":8,"c":27,"label":"19","type":"track"},{"r":8,"c":28,"label":"20","type":"track"},{"r":8,"c":29,"label":"21","type":"track"},{"r":8,"c":30,"label":"22","type":"track"},{"r":8,"c":31,"label":"23","type":"track"},{"r":8,"c":32,"label":"24","type":"track"},{"r":8,"c":33,"label":"25","type":"track"},{"r":8,"c":34,"label":"26","type":"track"},{"r":8,"c":35,"label":"27","type":"track"},{"r":8,"c":36,"label":"28","type":"track"},{"r":8,"c":37,"label":"29","type":"track"},{"r":8,"c":38,"label":"30","type":"track"},{"r":8,"c":39,"label":"31","type":"track"},{"r":8,"c":40,"label":"32","type":"track"},{"r":8,"c":41,"label":"33","type":"track"},{"r":8,"c":42,"label":"34","type":"track"},{"r":8,"c":43,"label":"35","type":"track"},{"r":8,"c":44,"label":"36","type":"track"},{"r":8,"c":45,"label":"37","type":"track"},{"r":8,"c":46,"label":"38","type":"track"},{"r":8,"c":47,"label":"39","type":"track"},{"r":8,"c":48,"label":"40","type":"track"},{"r":8,"c":49,"label":"41","type":"track"},{"r":8,"c":50,"label":"42","type":"track"},{"r":8,"c":51,"label":"43","type":"track"},{"r":8,"c":52,"label":"44","type":"track"},{"r":8,"c":53,"label":"45","type":"track"},{"r":8,"c":54,"label":"46","type":"track"},{"r":8,"c":55,"label":"47","type":"track"},{"r":8,"c":56,"label":"48","type":"track"},{"r":8,"c":57,"label":"49","type":"track"},{"r":8,"c":58,"label":"50","type":"track"},{"r":8,"c":59,"label":"51","type":"track"},{"r":8,"c":60,"label":"52","type":"track"},{"r":8,"c":61,"label":"53","type":"track"},{"r":8,"c":62,"label":"54","type":"track"},{"r":8,"c":63,"label":"55","type":"track"},{"r":8,"c":64,"label":"56","type":"track"},{"r":8,"c":65,"label":"57","type":"track"},{"r":8,"c":66,"label":"58","type":"track"},{"r":8,"c":67,"label":"59","type":"track"},{"r":8,"c":68,"label":"60","type":"track"},{"r":8,"c":69,"label":"61","type":"track"},{"r":8,"c":70,"label":"62","type":"track"},{"r":8,"c":71,"label":"63","type":"track"},{"r":8,"c":72,"label":"64","type":"track"},{"r":8,"c":73,"label":"65","type":"track"},{"r":8,"c":74,"label":"66","type":"track"},{"r":8,"c":75,"label":"67","type":"track"},{"r":8,"c":76,"label":"68","type":"track"},{"r":8,"c":77,"label":"69","type":"track"},{"r":8,"c":78,"label":"70","type":"track"},{"r":8,"c":79,"label":"71","type":"track"},{"r":8,"c":80,"label":"72","type":"track"},{"r":8,"c":81,"label":"73","type":"track"},{"r":8,"c":82,"label":"74","type":"track"},{"r":8,"c":83,"label":"75","type":"track"},{"r":8,"c":84,"label":"76","type":"track"},{"r":8,"c":85,"label":"77","type":"track"},{"r":8,"c":86,"label":"78","type":"track"},{"r":8,"c":87,"label":"79","type":"track"},{"r":8,"c":88,"label":"80","type":"track"},{"r":8,"c":89,"label":"81","type":"track"},{"r":8,"c":90,"label":"82","type":"track"},{"r":8,"c":91,"label":"83","type":"track"},{"r":8,"c":92,"label":"84","type":"track"},{"r":8,"c":93,"label":"85","type":"track"},{"r":8,"c":94,"label":"86","type":"track"},{"r":8,"c":95,"label":"87","type":"track"},{"r":8,"c":96,"label":"88","type":"track"},{"r":8,"c":97,"label":"89","type":"track"},{"r":8,"c":98,"label":"90","type":"track"},{"r":8,"c":99,"label":"91","type":"track"},{"r":8,"c":100,"label":"92","type":"track"},{"r":8,"c":101,"label":"93","type":"track"},{"r":8,"c":102,"label":"94","type":"track"},{"r":8,"c":103,"label":"95","type":"track"},{"r":8,"c":104,"label":"96","type":"track"},{"r":8,"c":105,"label":"97","type":"track"},{"r":8,"c":106,"label":"98","type":"track"},{"r":8,"c":107,"label":"99","type":"track"},{"r":8,"c":108,"label":"100","type":"track"},{"r":8,"c":109,"label":"101","type":"track"},{"r":8,"c":110,"label":"102","type":"track"},{"r":8,"c":111,"label":"103","type":"track"},{"r":8,"c":112,"label":"104","type":"track"},{"r":8,"c":113,"label":"105","type":"track"},{"r":8,"c":114,"label":"106","type":"track"},{"r":8,"c":115,"label":"107","type":"track"},{"r":8,"c":116,"label":"108","type":"track"},{"r":8,"c":117,"label":"109","type":"track"},{"r":8,"c":118,"label":"110","type":"track"},{"r":8,"c":119,"label":"111","type":"track"},{"r":8,"c":120,"label":"112","type":"track"},{"r":8,"c":121,"label":"113","type":"track"},{"r":8,"c":122,"label":"114","type":"track"},{"r":8,"c":123,"label":"115","type":"track"},{"r":8,"c":124,"label":"116","type":"track"},{"r":8,"c":125,"label":"117","type":"track"},{"r":8,"c":126,"label":"118","type":"track"},{"r":8,"c":127,"label":"119","type":"track"},{"r":8,"c":128,"label":"120","type":"track"},{"r":8,"c":129,"label":"121","type":"track"},{"r":8,"c":130,"label":"122","type":"track"},{"r":8,"c":131,"label":"123","type":"track"},{"r":8,"c":132,"label":"124","type":"track"},{"r":8,"c":133,"label":"125","type":"track"},{"r":8,"c":134,"label":"126","type":"track"},{"r":8,"c":135,"label":"127","type":"track"},{"r":8,"c":136,"label":"128","type":"track"},{"r":8,"c":137,"label":"129","type":"track"},{"r":8,"c":138,"label":"130","type":"track"},{"r":8,"c":139,"label":"131","type":"track"},{"r":8,"c":140,"label":"132","type":"track"},{"r":8,"c":141,"label":"133","type":"track"},{"r":8,"c":142,"label":"134","type":"track"},{"r":8,"c":143,"label":"135","type":"track"},{"r":8,"c":144,"label":"136","type":"track"},{"r":8,"c":145,"label":"137","type":"track"},{"r":8,"c":146,"label":"138","type":"track"},{"r":8,"c":147,"label":"139","type":"track"},{"r":8,"c":148,"label":"140","type":"track"},{"r":8,"c":149,"label":"141","type":"track"},{"r":8,"c":150,"label":"142","type":"track"},{"r":8,"c":151,"label":"143","type":"track"},{"r":8,"c":152,"label":"144","type":"track"},{"r":8,"c":153,"label":"145","type":"track"},{"r":8,"c":154,"label":"146","type":"track"},{"r":8,"c":155,"label":"147","type":"track"},{"r":8,"c":156,"label":"148","type":"track"},{"r":8,"c":157,"label":"149","type":"track"},{"r":9,"c":8,"label":"319","type":"track"},{"r":9,"c":72,"label":"CH001","type":"non_lh"},{"r":9,"c":73,"label":"CH003","type":"non_lh"},{"r":9,"c":74,"label":"CH005","type":"lh"},{"r":9,"c":75,"label":"CH007","type":"non_lh"},{"r":9,"c":76,"label":"CH009","type":"lh"},{"r":9,"c":77,"label":"CH011","type":"changed"},{"r":9,"c":78,"label":"CH013","type":"lh"},{"r":9,"c":79,"label":"CH015","type":"lh"},{"r":9,"c":80,"label":"CH017","type":"changed"},{"r":9,"c":81,"label":"CH019","type":"lh"},{"r":9,"c":82,"label":"CH021","type":"changed"},{"r":9,"c":83,"label":"CH023","type":"lh"},{"r":9,"c":84,"label":"CH025","type":"lh"},{"r":9,"c":85,"label":"CH027","type":"changed"},{"r":9,"c":86,"label":"CH029","type":"lh"},{"r":9,"c":87,"label":"CH031","type":"changed"},{"r":9,"c":88,"label":"CH033","type":"changed"},{"r":9,"c":89,"label":"CH035","type":"lh"},{"r":9,"c":90,"label":"CH037","type":"lh"},{"r":9,"c":91,"label":"CH039","type":"lh"},{"r":9,"c":92,"label":"CH041","type":"changed"},{"r":9,"c":93,"label":"CH043","type":"lh"},{"r":9,"c":94,"label":"CH045","type":"lh"},{"r":9,"c":95,"label":"CH047","type":"lh"},{"r":9,"c":96,"label":"CH049","type":"lh"},{"r":9,"c":97,"label":"CH051","type":"lh"},{"r":9,"c":98,"label":"CH053","type":"lh"},{"r":9,"c":99,"label":"CH055","type":"lh"},{"r":9,"c":100,"label":"CH057","type":"lh"},{"r":9,"c":101,"label":"CH059","type":"lh"},{"r":9,"c":102,"label":"CH061","type":"lh"},{"r":9,"c":103,"label":"CH063","type":"lh"},{"r":9,"c":104,"label":"CH065","type":"lh"},{"r":9,"c":105,"label":"CH067","type":"lh"},{"r":9,"c":106,"label":"CH069","type":"lh"},{"r":9,"c":107,"label":"CH071","type":"lh"},{"r":9,"c":108,"label":"CH073","type":"lh"},{"r":9,"c":109,"label":"CH075","type":"lh"},{"r":9,"c":110,"label":"CH077","type":"lh"},{"r":9,"c":111,"label":"CH079","type":"lh"},{"r":9,"c":112,"label":"CH081","type":"lh"},{"r":9,"c":113,"label":"CH083","type":"lh"},{"r":9,"c":114,"label":"CH085","type":"lh"},{"r":9,"c":115,"label":"CH087","type":"lh"},{"r":9,"c":116,"label":"CH089","type":"lh"},{"r":9,"c":117,"label":"CH091","type":"lh"},{"r":9,"c":118,"label":"CH093","type":"lh"},{"r":9,"c":119,"label":"CH095","type":"lh"},{"r":9,"c":120,"label":"CH097","type":"lh"},{"r":9,"c":121,"label":"CH099","type":"lh"},{"r":9,"c":122,"label":"CH101","type":"lh"},{"r":9,"c":123,"label":"CH103","type":"lh"},{"r":9,"c":124,"label":"CH105","type":"lh"},{"r":9,"c":125,"label":"CH107","type":"lh"},{"r":9,"c":126,"label":"CH109","type":"lh"},{"r":9,"c":127,"label":"CH111","type":"lh"},{"r":9,"c":128,"label":"CH113","type":"changed"},{"r":9,"c":129,"label":"CH115","type":"lh"},{"r":9,"c":130,"label":"CH117","type":"lh"},{"r":9,"c":131,"label":"CH119","type":"non_lh"},{"r":9,"c":157,"label":"150","type":"track"},{"r":10,"c":8,"label":"318","type":"track"},{"r":10,"c":157,"label":"151","type":"track"},{"r":11,"c":8,"label":"317","type":"track"},{"r":11,"c":157,"label":"152","type":"track"},{"r":12,"c":8,"label":"316","type":"track"},{"r":12,"c":157,"label":"153","type":"track"},{"r":13,"c":8,"label":"315","type":"track"},{"r":13,"c":157,"label":"154","type":"track"},{"r":14,"c":8,"label":"314","type":"track"},{"r":14,"c":157,"label":"155","type":"track"},{"r":15,"c":8,"label":"313","type":"track"},{"r":15,"c":157,"label":"156","type":"track"},{"r":16,"c":8,"label":"312","type":"track"},{"r":16,"c":157,"label":"157","type":"track"},{"r":17,"c":8,"label":"311","type":"track"},{"r":17,"c":157,"label":"158","type":"track"},{"r":18,"c":8,"label":"310","type":"track"},{"r":18,"c":34,"label":"CH240","type":"non_lh"},{"r":18,"c":35,"label":"CH238","type":"lh"},{"r":18,"c":36,"label":"CH236","type":"lh"},{"r":18,"c":37,"label":"CH234","type":"lh"},{"r":18,"c":38,"label":"CH232","type":"lh"},{"r":18,"c":39,"label":"CH230","type":"changed"},{"r":18,"c":40,"label":"CH228","type":"lh"},{"r":18,"c":41,"label":"CH226","type":"lh"},{"r":18,"c":42,"label":"CH224","type":"lh"},{"r":18,"c":43,"label":"CH222","type":"lh"},{"r":18,"c":44,"label":"CH220","type":"lh"},{"r":18,"c":45,"label":"CH218","type":"lh"},{"r":18,"c":46,"label":"CH216","type":"lh"},{"r":18,"c":47,"label":"CH214","type":"lh"},{"r":18,"c":48,"label":"CH212","type":"lh"},{"r":18,"c":49,"label":"CH210","type":"lh"},{"r":18,"c":50,"label":"CH208","type":"lh"},{"r":18,"c":51,"label":"CH206","type":"changed"},{"r":18,"c":52,"label":"CH204","type":"lh"},{"r":18,"c":53,"label":"CH202","type":"lh"},{"r":18,"c":54,"label":"CH200","type":"lh"},{"r":18,"c":55,"label":"CH198","type":"lh"},{"r":18,"c":56,"label":"CH196","type":"lh"},{"r":18,"c":57,"label":"CH194","type":"lh"},{"r":18,"c":58,"label":"CH192","type":"lh"},{"r":18,"c":59,"label":"CH190","type":"lh"},{"r":18,"c":60,"label":"CH188","type":"lh"},{"r":18,"c":61,"label":"CH186","type":"lh"},{"r":18,"c":62,"label":"CH184","type":"lh"},{"r":18,"c":63,"label":"CH182","type":"lh"},{"r":18,"c":64,"label":"CH180","type":"lh"},{"r":18,"c":65,"label":"CH178","type":"lh"},{"r":18,"c":66,"label":"CH176","type":"lh"},{"r":18,"c":67,"label":"CH174","type":"lh"},{"r":18,"c":68,"label":"CH172","type":"lh"},{"r":18,"c":69,"label":"CH170","type":"lh"},{"r":18,"c":70,"label":"CH168","type":"lh"},{"r":18,"c":71,"label":"CH166","type":"lh"},{"r":18,"c":72,"label":"CH164","type":"lh"},{"r":18,"c":73,"label":"CH162","type":"lh"},{"r":18,"c":74,"label":"CH160","type":"lh"},{"r":18,"c":75,"label":"CH158","type":"lh"},{"r":18,"c":76,"label":"CH156","type":"lh"},{"r":18,"c":77,"label":"CH154","type":"lh"},{"r":18,"c":78,"label":"CH152","type":"non_lh"},{"r":18,"c":79,"label":"CH150","type":"non_lh"},{"r":18,"c":80,"label":"CH148","type":"non_lh"},{"r":18,"c":81,"label":"CH146","type":"non_lh"},{"r":18,"c":82,"label":"CH144","type":"non_lh"},{"r":18,"c":83,"label":"CH142","type":"non_lh"},{"r":18,"c":84,"label":"CH140","type":"non_lh"},{"r":18,"c":85,"label":"CH138","type":"non_lh"},{"r":18,"c":86,"label":"CH136","type":"non_lh"},{"r":18,"c":87,"label":"CH134","type":"non_lh"},{"r":18,"c":88,"label":"CH132","type":"non_lh"},{"r":18,"c":89,"label":"CH130","type":"non_lh"},{"r":18,"c":90,"label":"CH128","type":"non_lh"},{"r":18,"c":91,"label":"CH126","type":"non_lh"},{"r":18,"c":92,"label":"CH124","type":"non_lh"},{"r":18,"c":93,"label":"CH122","type":"non_lh"},{"r":18,"c":157,"label":"159","type":"track"},{"r":19,"c":8,"label":"309","type":"track"},{"r":19,"c":9,"label":"308","type":"track"},{"r":19,"c":10,"label":"307","type":"track"},{"r":19,"c":11,"label":"306","type":"track"},{"r":19,"c":12,"label":"305","type":"track"},{"r":19,"c":13,"label":"304","type":"track"},{"r":19,"c":14,"label":"303","type":"track"},{"r":19,"c":15,"label":"302","type":"track"},{"r":19,"c":16,"label":"301","type":"track"},{"r":19,"c":17,"label":"300","type":"track"},{"r":19,"c":18,"label":"299","type":"track"},{"r":19,"c":19,"label":"298","type":"track"},{"r":19,"c":20,"label":"297","type":"track"},{"r":19,"c":21,"label":"296","type":"track"},{"r":19,"c":22,"label":"295","type":"track"},{"r":19,"c":23,"label":"294","type":"track"},{"r":19,"c":24,"label":"293","type":"track"},{"r":19,"c":25,"label":"292","type":"track"},{"r":19,"c":26,"label":"291","type":"track"},{"r":19,"c":27,"label":"290","type":"track"},{"r":19,"c":28,"label":"289","type":"track"},{"r":19,"c":29,"label":"288","type":"track"},{"r":19,"c":30,"label":"287","type":"track"},{"r":19,"c":31,"label":"286","type":"track"},{"r":19,"c":32,"label":"285","type":"track"},{"r":19,"c":33,"label":"284","type":"track"},{"r":19,"c":34,"label":"283","type":"track"},{"r":19,"c":35,"label":"282","type":"track"},{"r":19,"c":36,"label":"281","type":"track"},{"r":19,"c":37,"label":"280","type":"track"},{"r":19,"c":38,"label":"279","type":"track"},{"r":19,"c":39,"label":"278","type":"track"},{"r":19,"c":40,"label":"277","type":"track"},{"r":19,"c":41,"label":"276","type":"track"},{"r":19,"c":42,"label":"275","type":"track"},{"r":19,"c":43,"label":"274","type":"track"},{"r":19,"c":44,"label":"273","type":"track"},{"r":19,"c":45,"label":"272","type":"track"},{"r":19,"c":46,"label":"271","type":"track"},{"r":19,"c":47,"label":"270","type":"track"},{"r":19,"c":48,"label":"269","type":"track"},{"r":19,"c":49,"label":"268","type":"track"},{"r":19,"c":50,"label":"267","type":"track"},{"r":19,"c":51,"label":"266","type":"track"},{"r":19,"c":52,"label":"265","type":"track"},{"r":19,"c":53,"label":"264","type":"track"},{"r":19,"c":54,"label":"263","type":"track"},{"r":19,"c":55,"label":"262","type":"track"},{"r":19,"c":56,"label":"261","type":"track"},{"r":19,"c":57,"label":"260","type":"track"},{"r":19,"c":58,"label":"259","type":"track"},{"r":19,"c":59,"label":"258","type":"track"},{"r":19,"c":60,"label":"257","type":"track"},{"r":19,"c":61,"label":"256","type":"track"},{"r":19,"c":62,"label":"255","type":"track"},{"r":19,"c":63,"label":"254","type":"track"},{"r":19,"c":64,"label":"253","type":"track"},{"r":19,"c":65,"label":"252","type":"track"},{"r":19,"c":66,"label":"251","type":"track"},{"r":19,"c":67,"label":"250","type":"track"},{"r":19,"c":68,"label":"249","type":"track"},{"r":19,"c":69,"label":"248","type":"track"},{"r":19,"c":70,"label":"247","type":"track"},{"r":19,"c":71,"label":"246","type":"track"},{"r":19,"c":72,"label":"245","type":"track"},{"r":19,"c":73,"label":"244","type":"track"},{"r":19,"c":74,"label":"243","type":"track"},{"r":19,"c":75,"label":"242","type":"track"},{"r":19,"c":76,"label":"241","type":"track"},{"r":19,"c":77,"label":"240","type":"track"},{"r":19,"c":78,"label":"239","type":"track"},{"r":19,"c":79,"label":"238","type":"track"},{"r":19,"c":80,"label":"237","type":"track"},{"r":19,"c":81,"label":"236","type":"track"},{"r":19,"c":82,"label":"235","type":"track"},{"r":19,"c":83,"label":"234","type":"track"},{"r":19,"c":84,"label":"233","type":"track"},{"r":19,"c":85,"label":"232","type":"track"},{"r":19,"c":86,"label":"231","type":"track"},{"r":19,"c":87,"label":"230","type":"track"},{"r":19,"c":88,"label":"229","type":"track"},{"r":19,"c":89,"label":"228","type":"track"},{"r":19,"c":90,"label":"227","type":"track"},{"r":19,"c":91,"label":"226","type":"track"},{"r":19,"c":92,"label":"225","type":"track"},{"r":19,"c":93,"label":"224","type":"track"},{"r":19,"c":94,"label":"223","type":"track"},{"r":19,"c":95,"label":"222","type":"track"},{"r":19,"c":96,"label":"221","type":"track"},{"r":19,"c":97,"label":"220","type":"track"},{"r":19,"c":98,"label":"219","type":"track"},{"r":19,"c":99,"label":"218","type":"track"},{"r":19,"c":100,"label":"217","type":"track"},{"r":19,"c":101,"label":"216","type":"track"},{"r":19,"c":102,"label":"215","type":"track"},{"r":19,"c":103,"label":"214","type":"track"},{"r":19,"c":104,"label":"213","type":"track"},{"r":19,"c":105,"label":"212","type":"track"},{"r":19,"c":106,"label":"211","type":"track"},{"r":19,"c":107,"label":"210","type":"track"},{"r":19,"c":108,"label":"209","type":"track"},{"r":19,"c":109,"label":"208","type":"track"},{"r":19,"c":110,"label":"207","type":"track"},{"r":19,"c":111,"label":"206","type":"track"},{"r":19,"c":112,"label":"205","type":"track"},{"r":19,"c":113,"label":"204","type":"track"},{"r":19,"c":114,"label":"203","type":"track"},{"r":19,"c":115,"label":"202","type":"track"},{"r":19,"c":116,"label":"201","type":"track"},{"r":19,"c":117,"label":"200","type":"track"},{"r":19,"c":118,"label":"199","type":"track"},{"r":19,"c":119,"label":"198","type":"track"},{"r":19,"c":120,"label":"197","type":"track"},{"r":19,"c":121,"label":"196","type":"track"},{"r":19,"c":122,"label":"195","type":"track"},{"r":19,"c":123,"label":"194","type":"track"},{"r":19,"c":124,"label":"193","type":"track"},{"r":19,"c":125,"label":"192","type":"track"},{"r":19,"c":126,"label":"191","type":"track"},{"r":19,"c":127,"label":"190","type":"track"},{"r":19,"c":128,"label":"189","type":"track"},{"r":19,"c":129,"label":"188","type":"track"},{"r":19,"c":130,"label":"187","type":"track"},{"r":19,"c":131,"label":"186","type":"track"},{"r":19,"c":132,"label":"185","type":"track"},{"r":19,"c":133,"label":"184","type":"track"},{"r":19,"c":134,"label":"183","type":"track"},{"r":19,"c":135,"label":"182","type":"track"},{"r":19,"c":136,"label":"181","type":"track"},{"r":19,"c":137,"label":"180","type":"track"},{"r":19,"c":138,"label":"179","type":"track"},{"r":19,"c":139,"label":"178","type":"track"},{"r":19,"c":140,"label":"177","type":"track"},{"r":19,"c":141,"label":"176","type":"track"},{"r":19,"c":142,"label":"175","type":"track"},{"r":19,"c":143,"label":"174","type":"track"},{"r":19,"c":144,"label":"173","type":"track"},{"r":19,"c":145,"label":"172","type":"track"},{"r":19,"c":146,"label":"171","type":"track"},{"r":19,"c":147,"label":"170","type":"track"},{"r":19,"c":148,"label":"169","type":"track"},{"r":19,"c":149,"label":"168","type":"track"},{"r":19,"c":150,"label":"167","type":"track"},{"r":19,"c":151,"label":"166","type":"track"},{"r":19,"c":152,"label":"165","type":"track"},{"r":19,"c":153,"label":"164","type":"track"},{"r":19,"c":154,"label":"163","type":"track"},{"r":19,"c":155,"label":"162","type":"track"},{"r":19,"c":156,"label":"161","type":"track"},{"r":19,"c":157,"label":"160","type":"track"},{"r":20,"c":34,"label":"CH239","type":"non_lh"},{"r":20,"c":35,"label":"CH237","type":"lh"},{"r":20,"c":36,"label":"CH235","type":"lh"},{"r":20,"c":37,"label":"CH233","type":"lh"},{"r":20,"c":38,"label":"CH231","type":"lh"},{"r":20,"c":39,"label":"CH229","type":"changed"},{"r":20,"c":40,"label":"CH227","type":"lh"},{"r":20,"c":41,"label":"CH225","type":"lh"},{"r":20,"c":42,"label":"CH223","type":"lh"},{"r":20,"c":43,"label":"CH221","type":"lh"},{"r":20,"c":44,"label":"CH219","type":"lh"},{"r":20,"c":45,"label":"CH217","type":"lh"},{"r":20,"c":46,"label":"CH215","type":"lh"},{"r":20,"c":47,"label":"CH213","type":"lh"},{"r":20,"c":48,"label":"CH211","type":"lh"},{"r":20,"c":49,"label":"CH209","type":"lh"},{"r":20,"c":50,"label":"CH207","type":"lh"},{"r":20,"c":51,"label":"CH205","type":"changed"},{"r":20,"c":52,"label":"CH203","type":"lh"},{"r":20,"c":53,"label":"CH201","type":"lh"},{"r":20,"c":54,"label":"CH199","type":"lh"},{"r":20,"c":55,"label":"CH197","type":"lh"},{"r":20,"c":56,"label":"CH195","type":"lh"},{"r":20,"c":57,"label":"CH193","type":"lh"},{"r":20,"c":58,"label":"CH191","type":"lh"},{"r":20,"c":59,"label":"CH189","type":"lh"},{"r":20,"c":60,"label":"CH187","type":"lh"},{"r":20,"c":61,"label":"CH185","type":"lh"},{"r":20,"c":62,"label":"CH183","type":"lh"},{"r":20,"c":63,"label":"CH181","type":"lh"},{"r":20,"c":64,"label":"CH179","type":"lh"},{"r":20,"c":65,"label":"CH177","type":"lh"},{"r":20,"c":66,"label":"CH175","type":"lh"},{"r":20,"c":67,"label":"CH173","type":"lh"},{"r":20,"c":68,"label":"CH171","type":"lh"},{"r":20,"c":69,"label":"CH169","type":"lh"},{"r":20,"c":70,"label":"CH167","type":"lh"},{"r":20,"c":71,"label":"CH165","type":"lh"},{"r":20,"c":72,"label":"CH163","type":"lh"},{"r":20,"c":73,"label":"CH161","type":"lh"},{"r":20,"c":74,"label":"CH159","type":"lh"},{"r":20,"c":75,"label":"CH157","type":"lh"},{"r":20,"c":76,"label":"CH155","type":"lh"},{"r":20,"c":77,"label":"CH153","type":"lh"},{"r":20,"c":78,"label":"CH151","type":"lh"},{"r":20,"c":79,"label":"CH149","type":"lh"},{"r":20,"c":80,"label":"CH147","type":"lh"},{"r":20,"c":81,"label":"CH145","type":"lh"},{"r":20,"c":82,"label":"CH143","type":"lh"},{"r":20,"c":83,"label":"CH141","type":"lh"},{"r":20,"c":84,"label":"CH139","type":"lh"},{"r":20,"c":85,"label":"CH137","type":"lh"},{"r":20,"c":86,"label":"CH135","type":"lh"},{"r":20,"c":87,"label":"CH133","type":"lh"},{"r":20,"c":88,"label":"CH131","type":"lh"},{"r":20,"c":89,"label":"CH129","type":"lh"},{"r":20,"c":90,"label":"CH127","type":"lh"},{"r":20,"c":91,"label":"CH125","type":"lh"},{"r":20,"c":92,"label":"CH123","type":"non_lh"},{"r":20,"c":93,"label":"CH121","type":"non_lh"},{"r":20,"c":120,"label":"L1-14","type":"induction"},{"r":20,"c":122,"label":"L1-13","type":"induction"},{"r":20,"c":124,"label":"L1-12","type":"induction"},{"r":20,"c":126,"label":"L1-11","type":"induction"},{"r":20,"c":128,"label":"L1-10","type":"induction"},{"r":20,"c":130,"label":"L1-9","type":"induction"},{"r":20,"c":132,"label":"L1-8","type":"induction"},{"r":21,"c":120,"label":"L2-14","type":"induction"},{"r":21,"c":122,"label":"L2-13","type":"induction"},{"r":21,"c":124,"label":"L2-12","type":"induction"},{"r":21,"c":126,"label":"L2-11","type":"induction"},{"r":21,"c":128,"label":"L2-10","type":"induction"},{"r":21,"c":130,"label":"L2-9","type":"induction"},{"r":21,"c":132,"label":"L2-8","type":"induction"},{"r":22,"c":120,"label":"L3-14","type":"induction"},{"r":22,"c":122,"label":"L3-13","type":"induction"},{"r":22,"c":124,"label":"L3-12","type":"induction"},{"r":22,"c":126,"label":"L3-11","type":"induction"},{"r":22,"c":128,"label":"L3-10","type":"induction"},{"r":22,"c":130,"label":"L3-9","type":"induction"},{"r":22,"c":132,"label":"L3-8","type":"induction"}];
+
+const svgNs = 'http://www.w3.org/2000/svg';
+const P = 8, S = 7, MIN_R = 5, MIN_C = 8, TRACK_COUNT = 320;
+const TYPE_COLORS = { track:'#D8D8D8', induction:'#4472C4' };
+const TYPE_LABELS = { track:'Loop Track', induction:'Induction', lh:'LH Chute', non_lh:'Non-LH / Empty', changed:'LH Changed' };
+const CHUTE_DEFAULT = '#E8E8E8';
+
+const ACTIVE_ROUTE_MAP = {"CH200":"BD A Mega SOC","CH194":"BD A Mega SOC","CH206":"BD A Mega SOC","CH202":"BD A Mega SOC","CH035":"BD A Mega SOC","CH198":"BD A Mega SOC","CH033":"BD A Mega SOC","CH032":"BD A Mega SOC","CH204":"BD A Mega SOC","CH192":"BD A Mega SOC","CH030":"BD A Mega SOC","CH031":"BD A Mega SOC","CH196":"BD A Mega SOC","CH034":"BD A Mega SOC","CH036":"BD A Mega SOC","CH029":"BD A Mega SOC","CH224":"BN A Mega SOC","CH228":"BN A Mega SOC","CH020":"BN A Mega SOC","CH015":"BN A Mega SOC","CH019":"BN A Mega SOC","CH234":"BN A Mega SOC","CH238":"BN A Mega SOC","CH014":"BN A Mega SOC","CH013":"BN A Mega SOC","CH016":"BN A Mega SOC","CH232":"BN A Mega SOC","CH226":"BN A Mega SOC","CH236":"BN A Mega SOC","CH018":"BN A Mega SOC","CH230":"BN A Mega SOC","CH017":"BN A Mega SOC","CH057":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH054":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH211":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH209":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH203":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH205":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH055":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH207":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH056":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH201":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH053":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH058":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH116":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH160":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH166":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH115":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH162":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH112":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH114":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH158":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH113":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH164":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH111":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH006":"HCM Mega SOC","CH008":"HCM Mega SOC","CH180":"HCM Mega SOC","CH010":"HCM Mega SOC","CH005":"HCM Mega SOC","CH176":"HCM Mega SOC","CH190":"HCM Mega SOC","CH186":"HCM Mega SOC","CH012":"HCM Mega SOC","CH178":"HCM Mega SOC","CH009":"HCM Mega SOC","CH184":"HCM Mega SOC","CH188":"HCM Mega SOC","CH182":"HCM Mega SOC","CH011":"HCM Mega SOC","CH044":"50-HCM Thu Duc/Linh Trung Hub","CH231":"50-HCM Thu Duc/Linh Trung Hub","CH041":"50-HCM Thu Duc/Linh Trung Hub","CH043":"50-HCM Thu Duc/Linh Trung Hub","CH221":"50-HCM Thu Duc/Linh Trung Hub","CH223":"50-HCM Thu Duc/Linh Trung Hub","CH225":"50-HCM Thu Duc/Linh Trung Hub","CH045":"50-HCM Thu Duc/Linh Trung Hub","CH227":"50-HCM Thu Duc/Linh Trung Hub","CH229":"50-HCM Thu Duc/Linh Trung Hub","CH042":"50-HCM Thu Duc/Linh Trung Hub","CH046":"50-HCM Thu Duc/Linh Trung Hub","CH070":"51-HCM D2/Cat Lai Hub","CH185":"51-HCM D2/Cat Lai Hub","CH072":"51-HCM D2/Cat Lai Hub","CH181":"51-HCM D2/Cat Lai Hub","CH183":"51-HCM D2/Cat Lai Hub","CH069":"51-HCM D2/Cat Lai Hub","CH071":"51-HCM D2/Cat Lai Hub","CH064":"50-HCM D2/An Phu Hub","CH063":"50-HCM D2/An Phu Hub","CH197":"50-HCM D2/An Phu Hub","CH195":"50-HCM D2/An Phu Hub","CH061":"50-HCM D2/An Phu Hub","CH062":"50-HCM D2/An Phu Hub","CH199":"50-HCM D2/An Phu Hub","CH171":"51-HCM D9/Phuoc Long B Hub","CH075":"51-HCM D9/Phuoc Long B Hub","CH173":"51-HCM D9/Phuoc Long B Hub","CH078":"51-HCM D9/Phuoc Long B Hub","CH175":"51-HCM D9/Phuoc Long B Hub","CH076":"51-HCM D9/Phuoc Long B Hub","CH169":"51-HCM D9/Phuoc Long B Hub","CH077":"51-HCM D9/Phuoc Long B Hub","CH214":"BN B Mega SOC","CH218":"BN B Mega SOC","CH212":"BN B Mega SOC","CH220":"BN B Mega SOC","CH026":"BN B Mega SOC","CH024":"BN B Mega SOC","CH027":"BN B Mega SOC","CH216":"BN B Mega SOC","CH023":"BN B Mega SOC","CH025":"BN B Mega SOC","CH022":"BN B Mega SOC","CH208":"BN B Mega SOC","CH222":"BN B Mega SOC","CH028":"BN B Mega SOC","CH021":"BN B Mega SOC","CH210":"BN B Mega SOC","CH040":"50-HCM Thu Duc Hub","CH039":"50-HCM Thu Duc Hub","CH233":"50-HCM Thu Duc Hub","CH235":"50-HCM Thu Duc Hub","CH037":"50-HCM Thu Duc Hub","CH237":"50-HCM Thu Duc Hub","CH038":"50-HCM Thu Duc Hub","CH149":"51-HCM D2/An Khanh Hub","CH153":"51-HCM D2/An Khanh Hub","CH088":"51-HCM D2/An Khanh Hub","CH089":"51-HCM D2/An Khanh Hub","CH090":"51-HCM D2/An Khanh Hub","CH151":"51-HCM D2/An Khanh Hub","CH087":"51-HCM D2/An Khanh Hub","CH098":"51-HCM D9/Long Binh Hub","CH135":"51-HCM D9/Long Binh Hub","CH100":"51-HCM D9/Long Binh Hub","CH099":"51-HCM D9/Long Binh Hub","CH137":"51-HCM D9/Long Binh Hub","CH097":"51-HCM D9/Long Binh Hub","CH133":"51-HCM D9/Long Binh Hub","CH145":"51-HCM Thu Duc/Linh Dong Hub","CH092":"51-HCM Thu Duc/Linh Dong Hub","CH094":"51-HCM Thu Duc/Linh Dong Hub","CH143":"51-HCM Thu Duc/Linh Dong Hub","CH093":"51-HCM Thu Duc/Linh Dong Hub","CH147":"51-HCM Thu Duc/Linh Dong Hub","CH091":"51-HCM Thu Duc/Linh Dong Hub","CH084":"51-HCM D9/Nguyen Van Tang Hub","CH083":"51-HCM D9/Nguyen Van Tang Hub","CH157":"51-HCM D9/Nguyen Van Tang Hub","CH085":"51-HCM D9/Nguyen Van Tang Hub","CH155":"51-HCM D9/Nguyen Van Tang Hub","CH086":"51-HCM D9/Nguyen Van Tang Hub","CH159":"51-HCM D9/Nguyen Van Tang Hub","CH106":"51-HCM D2/Thao Dien Hub","CH174":"51-HCM D2/Thao Dien Hub","CH172":"51-HCM D2/Thao Dien Hub","CH105":"51-HCM D2/Thao Dien Hub","CH050":"50-HCM D2 Hub","CH047":"50-HCM D2 Hub","CH049":"50-HCM D2 Hub","CH048":"50-HCM D2 Hub","CH219":"50-HCM D2 Hub","CH217":"50-HCM D2 Hub","CH079":"51-HCM D9/Phu Huu Hub","CH080":"51-HCM D9/Phu Huu Hub","CH167":"51-HCM D9/Phu Huu Hub","CH165":"51-HCM D9/Phu Huu Hub","CH067":"50-HCM D9/Man Thien Hub","CH065":"50-HCM D9/Man Thien Hub","CH066":"50-HCM D9/Man Thien Hub","CH187":"50-HCM D9/Man Thien Hub","CH189":"50-HCM D9/Man Thien Hub","CH068":"50-HCM D9/Man Thien Hub","CH101":"51-HCM D9/Tang Nhon Phu B Hub","CH131":"51-HCM D9/Tang Nhon Phu B Hub","CH129":"51-HCM D9/Tang Nhon Phu B Hub","CH102":"51-HCM D9/Tang Nhon Phu B Hub","CH193":"50-HCM D9/Duong Dinh Hoi Hub","CH060":"50-HCM D9/Duong Dinh Hoi Hub","CH059":"50-HCM D9/Duong Dinh Hoi Hub","CH191":"50-HCM D9/Duong Dinh Hoi Hub","CH125":"51-HCM Thu Duc/Ngo Chi Quoc Hub","CH127":"51-HCM Thu Duc/Ngo Chi Quoc Hub","CH103":"51-HCM Thu Duc/Ngo Chi Quoc Hub","CH104":"51-HCM Thu Duc/Ngo Chi Quoc Hub","CH095":"51-HCM Thu Duc/Linh Xuan Hub","CH141":"51-HCM Thu Duc/Linh Xuan Hub","CH096":"51-HCM Thu Duc/Linh Xuan Hub","CH139":"51-HCM Thu Duc/Linh Xuan Hub","CH161":"51-HCM D9/Hoang Huu Nam Hub","CH081":"51-HCM D9/Hoang Huu Nam Hub","CH082":"51-HCM D9/Hoang Huu Nam Hub","CH163":"51-HCM D9/Hoang Huu Nam Hub","CH109":"51-HCM D9/Xa Lo Ha Noi Hub","CH108":"51-HCM D9/Xa Lo Ha Noi Hub","CH168":"51-HCM D9/Xa Lo Ha Noi Hub","CH170":"51-HCM D9/Xa Lo Ha Noi Hub","CH107":"51-HCM D9/Xa Lo Ha Noi Hub","CH110":"51-HCM D9/Xa Lo Ha Noi Hub","CH156":"51-HCM D9/Long Truong Hub","CH154":"51-HCM D9/Long Truong Hub","CH118":"51-HCM D9/Long Truong Hub","CH117":"51-HCM D9/Long Truong Hub","CH179":"51-HCM Thu Duc/Binh Chieu Hub","CH073":"51-HCM Thu Duc/Binh Chieu Hub","CH177":"51-HCM Thu Duc/Binh Chieu Hub","CH074":"51-HCM Thu Duc/Binh Chieu Hub","CH052":"50-HCM D9/Truong Thanh Hub","CH051":"50-HCM D9/Truong Thanh Hub","CH213":"50-HCM D9/Truong Thanh Hub","CH215":"50-HCM D9/Truong Thanh Hub"};
+
+const REC_ROUTE_MAP = {"CH036":"BD A Mega SOC","CH032":"BD A Mega SOC","CH202":"BD A Mega SOC","CH192":"BD A Mega SOC","CH194":"BD A Mega SOC","CH030":"BD A Mega SOC","CH206":"BD A Mega SOC","CH035":"BD A Mega SOC","CH198":"BD A Mega SOC","CH029":"BD A Mega SOC","CH228":"BN A Mega SOC","CH015":"BN A Mega SOC","CH019":"BN A Mega SOC","CH238":"BN A Mega SOC","CH014":"BN A Mega SOC","CH236":"BN A Mega SOC","CH232":"BN A Mega SOC","CH224":"BN A Mega SOC","CH018":"BN A Mega SOC","CH013":"BN A Mega SOC","CH054":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH058":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH056":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH053":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH057":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH207":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH203":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH201":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH209":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH211":"50-HCM Thu Duc/Hiep Binh Phuoc Hub","CH164":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH166":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH116":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH111":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH115":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH113":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH162":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH112":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH160":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH158":"51-HCM Thu Duc/Hiep Binh Chanh Hub","CH180":"HCM Mega SOC","CH176":"HCM Mega SOC","CH178":"HCM Mega SOC","CH010":"HCM Mega SOC","CH008":"HCM Mega SOC","CH006":"HCM Mega SOC","CH005":"HCM Mega SOC","CH009":"HCM Mega SOC","CH184":"HCM Mega SOC","CH182":"HCM Mega SOC","CH227":"50-HCM Thu Duc/Linh Trung Hub","CH231":"50-HCM Thu Duc/Linh Trung Hub","CH044":"50-HCM Thu Duc/Linh Trung Hub","CH043":"50-HCM Thu Duc/Linh Trung Hub","CH045":"50-HCM Thu Duc/Linh Trung Hub","CH223":"50-HCM Thu Duc/Linh Trung Hub","CH221":"50-HCM Thu Duc/Linh Trung Hub","CH225":"50-HCM Thu Duc/Linh Trung Hub","CH046":"50-HCM Thu Duc/Linh Trung Hub","CH041":"50-HCM Thu Duc/Linh Trung Hub","CH214":"51-HCM D2/Cat Lai Hub","CH185":"51-HCM D2/Cat Lai Hub","CH071":"51-HCM D2/Cat Lai Hub","CH070":"51-HCM D2/Cat Lai Hub","CH072":"51-HCM D2/Cat Lai Hub","CH069":"51-HCM D2/Cat Lai Hub","CH108":"51-HCM D2/Cat Lai Hub","CH181":"51-HCM D2/Cat Lai Hub","CH229":"51-HCM D2/Cat Lai Hub","CH183":"51-HCM D2/Cat Lai Hub","CH061":"50-HCM D2/An Phu Hub","CH064":"50-HCM D2/An Phu Hub","CH055":"50-HCM D2/An Phu Hub","CH197":"50-HCM D2/An Phu Hub","CH063":"50-HCM D2/An Phu Hub","CH062":"50-HCM D2/An Phu Hub","CH199":"50-HCM D2/An Phu Hub","CH195":"50-HCM D2/An Phu Hub","CH205":"50-HCM D2/An Phu Hub","CH077":"51-HCM D9/Phuoc Long B Hub","CH114":"51-HCM D9/Phuoc Long B Hub","CH175":"51-HCM D9/Phuoc Long B Hub","CH078":"51-HCM D9/Phuoc Long B Hub","CH171":"51-HCM D9/Phuoc Long B Hub","CH076":"51-HCM D9/Phuoc Long B Hub","CH075":"51-HCM D9/Phuoc Long B Hub","CH169":"51-HCM D9/Phuoc Long B Hub","CH173":"51-HCM D9/Phuoc Long B Hub","CH218":"BN B Mega SOC","CH022":"BN B Mega SOC","CH216":"BN B Mega SOC","CH023":"BN B Mega SOC","CH024":"BN B Mega SOC","CH025":"BN B Mega SOC","CH212":"BN B Mega SOC","CH220":"BN B Mega SOC","CH040":"50-HCM Thu Duc Hub","CH038":"50-HCM Thu Duc Hub","CH233":"50-HCM Thu Duc Hub","CH235":"50-HCM Thu Duc Hub","CH037":"50-HCM Thu Duc Hub","CH237":"50-HCM Thu Duc Hub","CH039":"50-HCM Thu Duc Hub","CH186":"50-HCM Thu Duc Hub","CH222":"51-HCM D2/An Khanh Hub","CH020":"51-HCM D2/An Khanh Hub","CH151":"51-HCM D2/An Khanh Hub","CH087":"51-HCM D2/An Khanh Hub","CH090":"51-HCM D2/An Khanh Hub","CH149":"51-HCM D2/An Khanh Hub","CH153":"51-HCM D2/An Khanh Hub","CH089":"51-HCM D2/An Khanh Hub","CH088":"51-HCM D2/An Khanh Hub","CH137":"51-HCM D9/Long Binh Hub","CH098":"51-HCM D9/Long Binh Hub","CH133":"51-HCM D9/Long Binh Hub","CH135":"51-HCM D9/Long Binh Hub","CH100":"51-HCM D9/Long Binh Hub","CH099":"51-HCM D9/Long Binh Hub","CH097":"51-HCM D9/Long Binh Hub","CH143":"51-HCM Thu Duc/Linh Dong Hub","CH092":"51-HCM Thu Duc/Linh Dong Hub","CH094":"51-HCM Thu Duc/Linh Dong Hub","CH145":"51-HCM Thu Duc/Linh Dong Hub","CH091":"51-HCM Thu Duc/Linh Dong Hub","CH093":"51-HCM Thu Duc/Linh Dong Hub","CH147":"51-HCM Thu Duc/Linh Dong Hub","CH084":"51-HCM D9/Nguyen Van Tang Hub","CH155":"51-HCM D9/Nguyen Van Tang Hub","CH085":"51-HCM D9/Nguyen Van Tang Hub","CH159":"51-HCM D9/Nguyen Van Tang Hub","CH157":"51-HCM D9/Nguyen Van Tang Hub","CH086":"51-HCM D9/Nguyen Van Tang Hub","CH083":"51-HCM D9/Nguyen Van Tang Hub","CH012":"51-HCM D2/Thao Dien Hub","CH026":"51-HCM D2/Thao Dien Hub","CH172":"51-HCM D2/Thao Dien Hub","CH210":"51-HCM D2/Thao Dien Hub","CH174":"51-HCM D2/Thao Dien Hub","CH106":"51-HCM D2/Thao Dien Hub","CH105":"51-HCM D2/Thao Dien Hub","CH188":"50-HCM D2 Hub","CH048":"50-HCM D2 Hub","CH049":"50-HCM D2 Hub","CH217":"50-HCM D2 Hub","CH050":"50-HCM D2 Hub","CH219":"50-HCM D2 Hub","CH047":"50-HCM D2 Hub","CH165":"51-HCM D9/Phu Huu Hub","CH167":"51-HCM D9/Phu Huu Hub","CH011":"51-HCM D9/Phu Huu Hub","CH079":"51-HCM D9/Phu Huu Hub","CH208":"51-HCM D9/Phu Huu Hub","CH016":"51-HCM D9/Phu Huu Hub","CH080":"51-HCM D9/Phu Huu Hub","CH068":"50-HCM D9/Man Thien Hub","CH189":"50-HCM D9/Man Thien Hub","CH187":"50-HCM D9/Man Thien Hub","CH065":"50-HCM D9/Man Thien Hub","CH067":"50-HCM D9/Man Thien Hub","CH230":"50-HCM D9/Man Thien Hub","CH066":"50-HCM D9/Man Thien Hub","CH129":"51-HCM D9/Tang Nhon Phu B Hub","CH131":"51-HCM D9/Tang Nhon Phu B Hub","CH102":"51-HCM D9/Tang Nhon Phu B Hub","CH101":"51-HCM D9/Tang Nhon Phu B Hub","CH042":"51-HCM D9/Tang Nhon Phu B Hub","CH059":"50-HCM D9/Duong Dinh Hoi Hub","CH021":"50-HCM D9/Duong Dinh Hoi Hub","CH226":"50-HCM D9/Duong Dinh Hoi Hub","CH060":"50-HCM D9/Duong Dinh Hoi Hub","CH191":"50-HCM D9/Duong Dinh Hoi Hub","CH193":"50-HCM D9/Duong Dinh Hoi Hub","CH125":"51-HCM Thu Duc/Ngo Chi Quoc Hub","CH103":"51-HCM Thu Duc/Ngo Chi Quoc Hub","CH127":"51-HCM Thu Duc/Ngo Chi Quoc Hub","CH104":"51-HCM Thu Duc/Ngo Chi Quoc Hub","CH027":"51-HCM Thu Duc/Ngo Chi Quoc Hub","CH190":"51-HCM Thu Duc/Ngo Chi Quoc Hub","CH139":"51-HCM Thu Duc/Linh Xuan Hub","CH141":"51-HCM Thu Duc/Linh Xuan Hub","CH096":"51-HCM Thu Duc/Linh Xuan Hub","CH095":"51-HCM Thu Duc/Linh Xuan Hub","CH234":"51-HCM Thu Duc/Linh Xuan Hub","CH031":"51-HCM Thu Duc/Linh Xuan Hub","CH081":"51-HCM D9/Hoang Huu Nam Hub","CH161":"51-HCM D9/Hoang Huu Nam Hub","CH033":"51-HCM D9/Hoang Huu Nam Hub","CH204":"51-HCM D9/Hoang Huu Nam Hub","CH082":"51-HCM D9/Hoang Huu Nam Hub","CH163":"51-HCM D9/Hoang Huu Nam Hub","CH170":"51-HCM D9/Xa Lo Ha Noi Hub","CH168":"51-HCM D9/Xa Lo Ha Noi Hub","CH110":"51-HCM D9/Xa Lo Ha Noi Hub","CH200":"51-HCM D9/Xa Lo Ha Noi Hub","CH107":"51-HCM D9/Xa Lo Ha Noi Hub","CH109":"51-HCM D9/Xa Lo Ha Noi Hub","CH117":"51-HCM D9/Long Truong Hub","CH196":"51-HCM D9/Long Truong Hub","CH156":"51-HCM D9/Long Truong Hub","CH154":"51-HCM D9/Long Truong Hub","CH118":"51-HCM D9/Long Truong Hub","CH017":"51-HCM D9/Long Truong Hub","CH074":"51-HCM Thu Duc/Binh Chieu Hub","CH028":"51-HCM Thu Duc/Binh Chieu Hub","CH179":"51-HCM Thu Duc/Binh Chieu Hub","CH177":"51-HCM Thu Duc/Binh Chieu Hub","CH073":"51-HCM Thu Duc/Binh Chieu Hub","CH215":"50-HCM D9/Truong Thanh Hub","CH213":"50-HCM D9/Truong Thanh Hub","CH051":"50-HCM D9/Truong Thanh Hub","CH034":"50-HCM D9/Truong Thanh Hub","CH052":"50-HCM D9/Truong Thanh Hub"};
+
+function getRouteMap(mode) { return mode === 'current' ? ACTIVE_ROUTE_MAP : REC_ROUTE_MAP; }
+
+const ROUTE_PAYLOAD = {"BD A Mega SOC":78062,"BN A Mega SOC":64932,"50-HCM Thu Duc/Hiep Binh Phuoc Hub":46942,"51-HCM Thu Duc/Hiep Binh Chanh Hub":44548,"HCM Mega SOC":41063,"50-HCM Thu Duc/Linh Trung Hub":40900,"51-HCM D2/Cat Lai Hub":39815,"50-HCM D2/An Phu Hub":34398,"51-HCM D9/Phuoc Long B Hub":33535,"BN B Mega SOC":31234,"50-HCM Thu Duc Hub":29732,"51-HCM D2/An Khanh Hub":28137,"51-HCM D9/Long Binh Hub":26948,"51-HCM Thu Duc/Linh Dong Hub":26823,"51-HCM D9/Nguyen Van Tang Hub":23009,"51-HCM D2/Thao Dien Hub":21937,"50-HCM D2 Hub":21705,"51-HCM D9/Phu Huu Hub":21411,"50-HCM D9/Man Thien Hub":19751,"51-HCM D9/Tang Nhon Phu B Hub":17890,"50-HCM D9/Duong Dinh Hoi Hub":17816,"51-HCM Thu Duc/Ngo Chi Quoc Hub":17732,"51-HCM Thu Duc/Linh Xuan Hub":16798,"51-HCM D9/Hoang Huu Nam Hub":15236,"51-HCM D9/Xa Lo Ha Noi Hub":14493,"51-HCM D9/Long Truong Hub":13465,"51-HCM Thu Duc/Binh Chieu Hub":10887,"50-HCM D9/Truong Thanh Hub":9778};
+
+const DIFF_CHUTES = new Set();
+(function buildDiffSet() {
+  const allChutes = new Set([...Object.keys(ACTIVE_ROUTE_MAP), ...Object.keys(REC_ROUTE_MAP)]);
+  allChutes.forEach(ch => {
+    const a = ACTIVE_ROUTE_MAP[ch] || null;
+    const r = REC_ROUTE_MAP[ch] || null;
+    if (a !== r) DIFF_CHUTES.add(ch);
+  });
+})();
+
+function calcRouteAllocation(totalParcels) {
+  const totalPayload = Object.values(ROUTE_PAYLOAD).reduce((a, b) => a + b, 0);
+  const alloc = {};
+  let assigned = 0;
+  const entries = Object.entries(ROUTE_PAYLOAD);
+  entries.forEach(([route, payload], i) => {
+    if (i === entries.length - 1) {
+      alloc[route] = totalParcels - assigned;
+    } else {
+      const count = Math.round(totalParcels * payload / totalPayload);
+      alloc[route] = count;
+      assigned += count;
+    }
+  });
+  return alloc;
+}
+
+function chuteColor(n, thresholds) {
+  if (n <= 0) return CHUTE_DEFAULT;
+  if (n < thresholds[0]) return '#FFE2E2';
+  if (n < thresholds[1]) return '#FFCCCC';
+  if (n < thresholds[2]) return '#FF9999';
+  return '#FF6666';
+}
+
+function calcUnifiedThresholds() {
+  const allCounts = [
+    ...Object.values(simCurrent.chuteCount),
+    ...Object.values(simRec.chuteCount)
+  ].filter(v => v > 0);
+  if (allCounts.length === 0) return [1, 2, 3];
+  const max = Math.max(...allCounts);
+  const step = Math.max(1, Math.ceil(max / 4));
+  return [step, step * 2, step * 3];
+}
+
+let sharedThresholds = [1, 2, 3];
+
+function refreshAllChuteColors() {
+  sharedThresholds = calcUnifiedThresholds();
+  [simCurrent, simRec].forEach(sim => {
+    const routeMap = getRouteMap(sim.mode);
+    Object.keys(sim.chuteRects).forEach(lbl => {
+      if (!routeMap[lbl]) {
+        sim.chuteRects[lbl].setAttribute('fill', '#F5F5F5');
+      } else {
+        sim.chuteRects[lbl].setAttribute('fill', chuteColor(sim.chuteCount[lbl] || 0, sharedThresholds));
+      }
+    });
+  });
+}
+
+
+function isChute(t) { return t === 'lh' || t === 'non_lh' || t === 'changed'; }
+
+const trackPath = [];
+const chutesByTrackPos = {};
+const inductionEntries = [];
+const topChuteLabels = new Set();
+const bottomChuteLabels = new Set();
+
+function buildTrackPath() {
+  const byLabel = {};
+  LAYOUT_DATA.forEach(d => { if (d.type === 'track') byLabel[parseInt(d.label)] = d; });
+  for (let i = 0; i < TRACK_COUNT; i++) {
+    const d = byLabel[i];
+    trackPath.push({ x: (d.c - MIN_C) * P + S * 0.5, y: (d.r - MIN_R) * P + S * 0.5 });
+  }
+}
+
+function buildChuteMap() {
+  LAYOUT_DATA.forEach(d => {
+    if (!isChute(d.type)) return;
+    let tpi;
+    if (d.r === 7 || d.r === 9) tpi = d.c - 8;
+    else if (d.r === 18 || d.r === 20) tpi = 317 - d.c;
+    else return;
+    if (tpi < 0 || tpi >= TRACK_COUNT) return;
+    const side = (d.r === 7 || d.r === 9) ? 'top' : 'bottom';
+    if (!chutesByTrackPos[tpi]) chutesByTrackPos[tpi] = [];
+    chutesByTrackPos[tpi].push({
+      label: d.label,
+      cx: (d.c - MIN_C) * P + S * 0.5,
+      cy: (d.r - MIN_R) * P + S * 0.5,
+      side
+    });
+    if (side === 'top') topChuteLabels.add(d.label);
+    else bottomChuteLabels.add(d.label);
+  });
+}
+
+function buildInductionEntries() {
+  [33, 35, 37, 39, 41, 43, 45].forEach(c => {
+    inductionEntries.push({
+      sx: (c - MIN_C) * P + S * 0.5, sy: (5 - MIN_R) * P + S * 0.5,
+      tx: (c - MIN_C) * P + S * 0.5, ty: (8 - MIN_R) * P + S * 0.5,
+      tpi: c - 8, side: 'top'
+    });
+  });
+  [120, 122, 124, 126, 128, 130, 132].forEach(c => {
+    inductionEntries.push({
+      sx: (c - MIN_C) * P + S * 0.5, sy: (22 - MIN_R) * P + S * 0.5,
+      tx: (c - MIN_C) * P + S * 0.5, ty: (19 - MIN_R) * P + S * 0.5,
+      tpi: 317 - c, side: 'bottom'
+    });
+  });
+}
+
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function createSim(svgId, mode) {
+  const sim = {
+    svgId, mode,
+    chuteRects: {},
+    chuteCount: {},
+    parcels: [],
+    routeQueue: [],
+    lastSpawnTime: 0,
+    sorted: 0,
+    totalInput: 0,
+    occupiedPos: new Set()
+  };
+
+  const svg = document.getElementById(svgId);
+  svg.innerHTML = '';
+  let maxX = 0, maxY = 0;
+
+  LAYOUT_DATA.forEach(d => {
+    const x = (d.c - MIN_C) * P;
+    const y = (d.r - MIN_R) * P;
+    maxX = Math.max(maxX, x + S);
+    maxY = Math.max(maxY, y + S);
+
+    const rect = document.createElementNS(svgNs, 'rect');
+    rect.setAttribute('x', x);
+    rect.setAttribute('y', y);
+    rect.setAttribute('width', S);
+    rect.setAttribute('height', S);
+    rect.setAttribute('rx', 1);
+    const ch = isChute(d.type);
+    const routeMap = getRouteMap(mode);
+    const hasRoute = ch && routeMap[d.label];
+    rect.setAttribute('fill', ch ? (hasRoute ? CHUTE_DEFAULT : '#F5F5F5') : TYPE_COLORS[d.type]);
+    if (ch && DIFF_CHUTES.has(d.label)) {
+      const ul = document.createElementNS(svgNs, 'line');
+      ul.setAttribute('x1', x);
+      ul.setAttribute('y1', y + S);
+      ul.setAttribute('x2', x + S);
+      ul.setAttribute('y2', y + S);
+      ul.setAttribute('stroke', '#333333');
+      ul.setAttribute('stroke-width', '1.5');
+      svg.appendChild(ul);
+    }
+    rect.setAttribute('data-label', d.label);
+    rect.setAttribute('data-type', d.type);
+    rect.setAttribute('class', 'layout-cell');
+    rect.style.cursor = 'pointer';
+    svg.appendChild(rect);
+    if (ch) {
+      sim.chuteRects[d.label] = rect;
+      sim.chuteCount[d.label] = 0;
+    }
+  });
+
+  const arrows = [
+    { x: (82 - MIN_C) * P + 2, y: (8 - MIN_R) * P - 6, text: '→' },
+    { x: (157 - MIN_C) * P + 8, y: (13 - MIN_R) * P, text: '↓' },
+    { x: (82 - MIN_C) * P + 2, y: (19 - MIN_R) * P + 14, text: '←' },
+    { x: (8 - MIN_C) * P - 8, y: (13 - MIN_R) * P, text: '↑' },
+  ];
+  arrows.forEach(a => {
+    const t = document.createElementNS(svgNs, 'text');
+    t.setAttribute('x', a.x); t.setAttribute('y', a.y);
+    t.setAttribute('font-size', '10'); t.setAttribute('fill', '#999');
+    t.setAttribute('text-anchor', 'middle');
+    t.textContent = a.text;
+    svg.appendChild(t);
+  });
+
+  svg.setAttribute('viewBox', `0 0 ${maxX + 10} ${maxY + 10}`);
+  svg.setAttribute('width', maxX + 10);
+  svg.setAttribute('height', maxY + 10);
+
+  const tooltip = document.getElementById('cellTooltip');
+  svg.addEventListener('mouseover', e => {
+    const r = e.target.closest('.layout-cell');
+    if (!r) { tooltip.style.display = 'none'; return; }
+    const label = r.getAttribute('data-label');
+    const type = r.getAttribute('data-type');
+    const routeMap = getRouteMap(mode);
+    let html;
+    if (type === 'track') {
+      html = '<b>Position ' + label + '</b><br>' + TYPE_LABELS.track;
+    } else if (isChute(type)) {
+      html = '<b>' + label + '</b>';
+      const route = routeMap[label];
+      html += '<br>' + (route || '<i style="color:#aaa">No Route</i>');
+      html += '<br>Volume: ' + (sim.chuteCount[label] || 0).toLocaleString();
+    } else {
+      html = '<b>' + label + '</b><br>' + (TYPE_LABELS[type] || type);
+    }
+    tooltip.innerHTML = html;
+    tooltip.style.display = 'block';
+  });
+  svg.addEventListener('mousemove', e => {
+    tooltip.style.left = (e.clientX + 14) + 'px';
+    tooltip.style.top = (e.clientY - 36) + 'px';
+  });
+  svg.addEventListener('mouseout', e => {
+    if (e.target.classList.contains('layout-cell')) tooltip.style.display = 'none';
+  });
+
+  return sim;
+}
+
+const routePreferredSide = {};
+const routeSideInfoByMode = { current: {}, recommended: {} };
+
+function buildRoutePreferredSide() {
+  function processSideInfo(rmap, target) {
+    const sideCount = {};
+    Object.entries(rmap).forEach(([ch, route]) => {
+      if (!sideCount[route]) sideCount[route] = { top: 0, bottom: 0 };
+      const side = topChuteLabels.has(ch) ? 'top' : 'bottom';
+      sideCount[route][side]++;
+    });
+    Object.entries(sideCount).forEach(([route, counts]) => {
+      target[route] = { top: counts.top > 0, bottom: counts.bottom > 0 };
+      if (!routePreferredSide[route]) {
+        routePreferredSide[route] = counts.top >= counts.bottom ? 'top' : 'bottom';
+      }
+    });
+  }
+  processSideInfo(ACTIVE_ROUTE_MAP, routeSideInfoByMode.current);
+  processSideInfo(REC_ROUTE_MAP, routeSideInfoByMode.recommended);
+}
+
+const topInductions = [];
+const bottomInductions = [];
+function splitInductions() {
+  inductionEntries.forEach(e => {
+    if (e.side === 'top') topInductions.push(e);
+    else bottomInductions.push(e);
+  });
+}
+
+function assignParcelFate(mode) {
+  const r = Math.random() * 100;
+  if (mode === 'current') {
+    if (r < 95)    return { targetLap: 0, useSameSide: true };
+    if (r < 98)    return { targetLap: 0, useSameSide: false };
+    if (r < 99)    return { targetLap: 1, useSameSide: true };
+    if (r < 99.5)  return { targetLap: 1, useSameSide: false };
+    if (r < 99.8)  return { targetLap: 2, useSameSide: true };
+    if (r < 99.9)  return { targetLap: 2, useSameSide: false };
+    return { targetLap: 3, useSameSide: true };
+  } else {
+    return { targetLap: 0, useSameSide: true };
+  }
+}
+
+function spawnParcel(sim) {
+  if (sim.routeQueue.length === 0) return;
+  const lookAhead = Math.min(sim.routeQueue.length, 20);
+  let item = null, entry = null, qIdx = -1;
+  for (let qi = 0; qi < lookAhead; qi++) {
+    const candidate = sim.routeQueue[qi];
+    const pool = candidate.side === 'top' ? topInductions : bottomInductions;
+    const shuffled = pool.slice().sort(() => Math.random() - 0.5);
+    for (const e of shuffled) {
+      if (!sim.occupiedPos.has(e.tpi)) { entry = e; break; }
+    }
+    if (entry) { item = candidate; qIdx = qi; break; }
+    entry = null;
+  }
+  if (!item) return;
+
+  sim.routeQueue.splice(qIdx, 1);
+  const route = item.route;
+  const spawnSide = item.side;
+  sim.occupiedPos.add(entry.tpi);
+
+  const svg = document.getElementById(sim.svgId);
+  const circle = document.createElementNS(svgNs, 'circle');
+  circle.setAttribute('r', 2.5);
+  circle.setAttribute('fill', '#FF4444');
+  circle.setAttribute('cx', entry.sx);
+  circle.setAttribute('cy', entry.sy);
+  circle.classList.add('parcel-dot');
+  svg.appendChild(circle);
+
+  const fate = assignParcelFate(sim.mode);
+  sim.parcels.push({
+    el: circle, state: 'entering', entry, route,
+    progress: 0, trackPos: entry.tpi, laps: 0, side: spawnSide,
+    targetLap: fate.targetLap, useSameSide: fate.useSameSide,
+    divertTarget: null, divertStart: null, divertProgress: 0
+  });
+  onTrackCount++;
+}
+
+function getAllChuteList() {
+  const all = {};
+  Object.keys(chutesByTrackPos).forEach(k => {
+    chutesByTrackPos[k].forEach(ch => { all[ch.label] = ch; });
+  });
+  return Object.values(all);
+}
+
+const chuteHotspotWeight = {};
+function initHotspotWeights() {
+  const all = getAllChuteList();
+  all.forEach(ch => {
+    chuteHotspotWeight[ch.label] = 0.1 + Math.pow(Math.random(), 0.5) * 4;
+  });
+}
+
+function pickWeightedHotspot(pool) {
+  const weights = pool.map(ch => chuteHotspotWeight[ch.label] || 1);
+  const totalW = weights.reduce((a, b) => a + b, 0);
+  let r = Math.random() * totalW;
+  for (let j = 0; j < pool.length; j++) {
+    r -= weights[j];
+    if (r <= 0) return pool[j];
+  }
+  return pool[pool.length - 1];
+}
+
+function updateSimParcel(sim, p, i) {
+  if (p.state === 'entering') {
+    p.progress += 0.04;
+    if (p.progress >= 1) {
+      p.state = 'on_track';
+      p.el.setAttribute('cx', p.entry.tx);
+      p.el.setAttribute('cy', p.entry.ty);
+    } else {
+      p.el.setAttribute('cx', p.entry.sx + (p.entry.tx - p.entry.sx) * p.progress);
+      p.el.setAttribute('cy', p.entry.sy + (p.entry.ty - p.entry.sy) * p.progress);
+    }
+    return false;
+  }
+
+  if (p.state === 'on_track') {
+    const oldIdx = Math.floor(p.trackPos);
+    let newPos = p.trackPos + 0.5;
+    let lapped = false;
+    if (newPos >= TRACK_COUNT) { newPos -= TRACK_COUNT; lapped = true; }
+    const newIdx = Math.floor(newPos);
+
+    if (newIdx !== oldIdx && sim.occupiedPos.has(newIdx)) {
+      return false;
+    }
+
+    if (newIdx !== oldIdx) {
+      sim.occupiedPos.delete(oldIdx);
+      sim.occupiedPos.add(newIdx);
+    }
+    p.trackPos = newPos;
+    if (lapped) p.laps++;
+
+    if (p.laps > 5) {
+      sim.occupiedPos.delete(Math.floor(p.trackPos));
+      p.el.remove();
+      onTrackCount--;
+      return true;
+    }
+
+    const idx = Math.floor(p.trackPos);
+    const frac = p.trackPos - idx;
+    const nxt = (idx + 1) % TRACK_COUNT;
+    const cx = trackPath[idx].x + (trackPath[nxt].x - trackPath[idx].x) * frac;
+    const cy = trackPath[idx].y + (trackPath[nxt].y - trackPath[idx].y) * frac;
+    p.el.setAttribute('cx', cx);
+    p.el.setAttribute('cy', cy);
+
+    if (p.laps >= p.targetLap) {
+      const adj = chutesByTrackPos[idx];
+      if (adj && adj.length > 0) {
+        let picked = null;
+        const routeMap = getRouteMap(sim.mode);
+        const validAdj = adj.filter(ch => routeMap[ch.label] === p.route);
+        const sameSide = validAdj.filter(ch => ch.side === p.side);
+        const crossSide = validAdj.filter(ch => ch.side !== p.side);
+
+        let pool;
+        if (p.useSameSide) {
+          pool = sameSide.length > 0 ? sameSide : crossSide;
+        } else {
+          pool = crossSide.length > 0 ? crossSide : sameSide;
+        }
+
+        if (pool.length > 0) {
+          const overdue = p.laps > p.targetLap;
+          const baseChance = sim.mode === 'recommended'
+            ? (overdue ? 1.0 : 0.95)
+            : (overdue ? 0.5 : 0.25);
+          if (Math.random() < baseChance) {
+            if (sim.mode === 'current') {
+              picked = pickWeightedHotspot(pool);
+            } else {
+              const weights = pool.map(ch => 1 / ((sim.chuteCount[ch.label] || 0) + 1));
+              const totalW = weights.reduce((a, b) => a + b, 0);
+              let r = Math.random() * totalW;
+              for (let j = 0; j < pool.length; j++) {
+                r -= weights[j];
+                if (r <= 0) { picked = pool[j]; break; }
+              }
+              if (!picked) picked = pool[pool.length - 1];
+            }
+          }
+        }
+
+        if (picked) {
+          sim.occupiedPos.delete(idx);
+          p.state = 'diverting';
+          p.divertTarget = picked;
+          p.divertStart = { x: cx, y: cy };
+          p.divertProgress = 0;
+        }
+      }
+    }
+    return false;
+  }
+
+  if (p.state === 'diverting') {
+    p.divertProgress += 0.04;
+    if (p.divertProgress >= 1) {
+      const lbl = p.divertTarget.label;
+      sim.chuteCount[lbl] = (sim.chuteCount[lbl] || 0) + 1;
+      sim.sorted++;
+      onTrackCount--;
+      p.el.setAttribute('r', '2');
+      p.el.setAttribute('fill', '#FF4444');
+      p.el.setAttribute('opacity', '0.6');
+      setTimeout(() => p.el.remove(), 200);
+      if (sim.sorted % 30 === 0) refreshAllChuteColors();
+      return true;
+    }
+    const t = p.divertProgress;
+    const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    const nx = p.divertStart.x + (p.divertTarget.cx - p.divertStart.x) * ease;
+    const ny = p.divertStart.y + (p.divertTarget.cy - p.divertStart.y) * ease;
+    p.el.setAttribute('cx', nx);
+    p.el.setAttribute('cy', ny);
+    p.el.setAttribute('r', String(3 - ease));
+    return false;
+  }
+  return false;
+}
+
+let simCurrent, simRec;
+let onTrackCount = 0, animRunning = false, paused = false;
+
+function sumChuteCounts(sim) {
+  return Object.values(sim.chuteCount).reduce((a, b) => a + b, 0);
+}
+
+function updateLayoutStats(sim, containerId) {
+  const counts = Object.values(sim.chuteCount).filter(v => v > 0);
+  const total = counts.reduce((a, b) => a + b, 0);
+  const min = counts.length > 0 ? Math.min(...counts) : 0;
+  const max = counts.length > 0 ? Math.max(...counts) : 0;
+  const avg = counts.length > 0 ? (total / counts.length).toFixed(1) : '0';
+  const active = counts.length;
+  const match = total === sim.totalInput;
+  const matchIcon = sim.totalInput > 0 ? (match ? ' ✓' : ' …') : '';
+  document.getElementById(containerId).innerHTML =
+    `Input: <span>${sim.totalInput.toLocaleString()}</span> &nbsp;|&nbsp; ` +
+    `Total Sorted: <span>${total.toLocaleString()}${matchIcon}</span> &nbsp;|&nbsp; ` +
+    `Active Chutes: <span>${active}</span> &nbsp;|&nbsp; ` +
+    `Min: <span>${min}</span> &nbsp;|&nbsp; ` +
+    `Max: <span>${max}</span> &nbsp;|&nbsp; ` +
+    `Avg: <span>${avg}</span>`;
+}
+
+function updateStats() {
+  document.getElementById('parcelStat').textContent = onTrackCount.toLocaleString();
+  document.getElementById('sortedCurrent').textContent = simCurrent.sorted.toLocaleString();
+  document.getElementById('sortedRec').textContent = simRec.sorted.toLocaleString();
+  updateLayoutStats(simCurrent, 'statsCurrent');
+  updateLayoutStats(simRec, 'statsRec');
+}
+
+function animate(now) {
+  if (paused) { requestAnimationFrame(animate); return; }
+
+  [simCurrent, simRec].forEach(sim => {
+    if (sim.routeQueue.length > 0 && now - sim.lastSpawnTime > 30) {
+      const batch = Math.min(3, sim.routeQueue.length);
+      for (let s = 0; s < batch; s++) spawnParcel(sim);
+      sim.lastSpawnTime = now;
+    }
+    for (let i = sim.parcels.length - 1; i >= 0; i--) {
+      if (updateSimParcel(sim, sim.parcels[i], i)) {
+        sim.parcels.splice(i, 1);
+      }
+    }
+  });
+
+  updateStats();
+
+  if (simCurrent.parcels.length > 0 || simRec.parcels.length > 0 ||
+      simCurrent.routeQueue.length > 0 || simRec.routeQueue.length > 0) {
+    requestAnimationFrame(animate);
+  } else {
+    animRunning = false;
+    refreshAllChuteColors();
+    updateLegends();
+  }
+}
+
+function buildBalancedQueue(routeAlloc, totalCount, mode) {
+  const sideInfo = routeSideInfoByMode[mode] || {};
+  const topOnly = [], bottomOnly = [], bothSides = [];
+  Object.entries(routeAlloc).forEach(([route, n]) => {
+    const info = sideInfo[route];
+    if (!info) return;
+    if (info.top && info.bottom) {
+      bothSides.push({ route, count: n });
+    } else if (info.top) {
+      topOnly.push({ route, count: n });
+    } else {
+      bottomOnly.push({ route, count: n });
+    }
+  });
+
+  let topQ = [], bottomQ = [];
+  topOnly.forEach(r => { for (let i = 0; i < r.count; i++) topQ.push(r.route); });
+  bottomOnly.forEach(r => { for (let i = 0; i < r.count; i++) bottomQ.push(r.route); });
+
+  const half = Math.floor(totalCount / 2);
+  let topNeed = Math.max(0, half - topQ.length);
+  let bottomNeed = Math.max(0, (totalCount - half) - bottomQ.length);
+
+  bothSides.forEach(r => {
+    const total = topNeed + bottomNeed;
+    if (total <= 0) {
+      const toTop = Math.floor(r.count / 2);
+      for (let i = 0; i < toTop; i++) topQ.push(r.route);
+      for (let i = 0; i < r.count - toTop; i++) bottomQ.push(r.route);
+      return;
+    }
+    const toTop = Math.min(r.count, Math.round(r.count * topNeed / total));
+    const toBottom = r.count - toTop;
+    for (let i = 0; i < toTop; i++) topQ.push(r.route);
+    for (let i = 0; i < toBottom; i++) bottomQ.push(r.route);
+    topNeed = Math.max(0, topNeed - toTop);
+    bottomNeed = Math.max(0, bottomNeed - toBottom);
+  });
+
+  shuffleArray(topQ);
+  shuffleArray(bottomQ);
+
+  const routeQueue = [];
+  const maxLen = Math.max(topQ.length, bottomQ.length);
+  for (let i = 0; i < maxLen; i++) {
+    if (i < topQ.length) routeQueue.push({ route: topQ[i], side: 'top' });
+    if (i < bottomQ.length) routeQueue.push({ route: bottomQ[i], side: 'bottom' });
+  }
+  return routeQueue;
+}
+
+function handleConfirm() {
+  const input = document.getElementById('parcelCount');
+  const count = parseInt(input.value) || 0;
+  if (count <= 0) return;
+  const routeAlloc = calcRouteAllocation(count);
+  const qCurrent = buildBalancedQueue(routeAlloc, count, 'current');
+  const qRec = buildBalancedQueue(routeAlloc, count, 'recommended');
+
+  simCurrent.routeQueue = simCurrent.routeQueue.concat(qCurrent);
+  simCurrent.totalInput += count;
+  simRec.routeQueue = simRec.routeQueue.concat(qRec);
+  simRec.totalInput += count;
+  input.value = '';
+  if (!animRunning) {
+    animRunning = true;
+    simCurrent.lastSpawnTime = 0;
+    simRec.lastSpawnTime = 0;
+    simCurrent.occupiedPos.clear();
+    simRec.occupiedPos.clear();
+    onTrackCount = Math.max(0, simCurrent.parcels.length + simRec.parcels.length);
+    requestAnimationFrame(animate);
+  }
+}
+
+function handlePause() {
+  paused = !paused;
+  document.getElementById('pauseBtn').textContent = paused ? '▶ Play' : '⏸ Pause';
+}
+
+function handleStop() {
+  [simCurrent, simRec].forEach(sim => {
+    sim.routeQueue.length = 0;
+    sim.parcels.forEach(p => p.el.remove());
+    onTrackCount -= sim.parcels.length;
+    sim.parcels.length = 0;
+    sim.occupiedPos.clear();
+  });
+  animRunning = false;
+  paused = false;
+  document.getElementById('pauseBtn').textContent = '⏸ Pause';
+  if (onTrackCount < 0) onTrackCount = 0;
+  updateStats();
+}
+
+function handleReset() {
+  handleStop();
+  [simCurrent, simRec].forEach(sim => {
+    sim.sorted = 0;
+    sim.totalInput = 0;
+    const routeMap = getRouteMap(sim.mode);
+    Object.keys(sim.chuteRects).forEach(lbl => {
+      sim.chuteRects[lbl].setAttribute('fill', routeMap[lbl] ? CHUTE_DEFAULT : '#F5F5F5');
+      sim.chuteCount[lbl] = 0;
+    });
+  });
+  onTrackCount = 0;
+  sharedThresholds = [1, 2, 3];
+  initHotspotWeights();
+  document.getElementById('parcelCount').value = '';
+  updateStats();
+  updateLegends();
+}
+
+function handleSkip() {
+  const totalTarget = simCurrent.totalInput;
+  const routeAlloc = calcRouteAllocation(totalTarget);
+
+  [simCurrent, simRec].forEach(sim => {
+    sim.parcels.forEach(p => p.el.remove());
+    onTrackCount -= sim.parcels.length;
+    sim.parcels.length = 0;
+    sim.routeQueue.length = 0;
+
+    const routeMap = getRouteMap(sim.mode);
+    const chuteList = getAllChuteList().filter(ch => routeMap[ch.label]);
+    const routeChutes = {};
+    chuteList.forEach(ch => {
+      const route = routeMap[ch.label];
+      if (!routeChutes[route]) routeChutes[route] = [];
+      routeChutes[route].push(ch);
+    });
+
+    const alreadySortedByRoute = {};
+    Object.keys(sim.chuteCount).forEach(lbl => {
+      if (sim.chuteCount[lbl] > 0) {
+        const route = routeMap[lbl];
+        if (route) alreadySortedByRoute[route] = (alreadySortedByRoute[route] || 0) + sim.chuteCount[lbl];
+      }
+    });
+
+    Object.entries(routeAlloc).forEach(([route, totalForRoute]) => {
+      const chutes = routeChutes[route];
+      if (!chutes || chutes.length === 0) return;
+      const alreadyDone = alreadySortedByRoute[route] || 0;
+      const remaining = Math.max(0, totalForRoute - alreadyDone);
+
+      for (let i = 0; i < remaining; i++) {
+        let picked;
+        if (sim.mode === 'recommended') {
+          const weights = chutes.map(ch => 1 / ((sim.chuteCount[ch.label] || 0) + 1));
+          const totalW = weights.reduce((a, b) => a + b, 0);
+          let r = Math.random() * totalW;
+          for (let j = 0; j < chutes.length; j++) {
+            r -= weights[j];
+            if (r <= 0) { picked = chutes[j]; break; }
+          }
+          if (!picked) picked = chutes[chutes.length - 1];
+        } else {
+          picked = pickWeightedHotspot(chutes);
+        }
+        sim.chuteCount[picked.label] = (sim.chuteCount[picked.label] || 0) + 1;
+        sim.sorted++;
+      }
+    });
+
+    refreshAllChuteColors();
+  });
+
+  animRunning = false;
+  paused = false;
+  document.getElementById('pauseBtn').textContent = '⏸ Pause';
+  if (onTrackCount < 0) onTrackCount = 0;
+  updateStats();
+  updateLegends();
+}
+
+document.getElementById('parcelCount').addEventListener('keydown', e => {
+  if (e.key === 'Enter') handleConfirm();
+});
+
+function buildLegend(containerId, thresholds) {
+  const el = document.getElementById(containerId);
+  const th = thresholds || [1, 2, 3];
+  const items = [
+    { color: '#D8D8D8', label: 'Loop Track' },
+    { color: '#4472C4', label: 'Induction' },
+    { color: '#E8E8E8', label: 'Chute (empty)' },
+    { color: '#FFE2E2', label: `1–${th[0]}` },
+    { color: '#FFCCCC', label: `${th[0]}–${th[1]}` },
+    { color: '#FF9999', label: `${th[1]}–${th[2]}` },
+    { color: '#FF6666', label: `${th[2]}+` },
+    { color: null, label: 'Route Changed', border: '#333333' },
+  ];
+  el.innerHTML = items.map(i => {
+    if (i.border) {
+      return `<div class="legend-item"><div class="legend-swatch" style="background:#E8E8E8;border-bottom:2.5px solid ${i.border}"></div>${i.label}</div>`;
+    }
+    return `<div class="legend-item"><div class="legend-swatch" style="background:${i.color}"></div>${i.label}</div>`;
+  }).join('');
+}
+
+function updateLegends() {
+  buildLegend('legendCurrent', sharedThresholds);
+  buildLegend('legendRec', sharedThresholds);
+}
+
+buildTrackPath();
+buildChuteMap();
+buildInductionEntries();
+splitInductions();
+buildRoutePreferredSide();
+initHotspotWeights();
+simCurrent = createSim('svgCurrent', 'current');
+simRec = createSim('svgRec', 'recommended');
+buildLegend('legendCurrent', [1, 2, 3]);
+buildLegend('legendRec', [1, 2, 3]);
+</script>
+</body>
+</html>
